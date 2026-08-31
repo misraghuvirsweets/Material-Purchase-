@@ -31,12 +31,13 @@
   .readonly-box{ background:#fbf7ee; border:1px dashed var(--brand-secondary); border-radius:12px; padding:14px; font-size:.9rem; }
   .readonly-box div{ margin-bottom:4px; }
   .toast-container{ z-index:1080; }
+  .verify-note{ font-size:.75rem; color:#8a6d00; background:#fff6da; border-radius:8px; padding:6px 10px; margin-top:6px; }
 </style>
 </head>
 <body>
 
 <div class="brand-header d-flex align-items-center gap-3">
-  <img src="https://drive.google.com/uc?export=view&id=18aiuiSN9uj-mJtOkGB1rNt4GP6yUbvuO" alt="Logo" onerror="this.style.display='none'">
+  <img src="https://drive.google.com/thumbnail?id=18aiuiSN9uj-mJtOkGB1rNt4GP6yUbvuO&sz=w200" alt="Logo" referrerpolicy="no-referrer" onerror="this.style.display='none'">
   <div class="flex-grow-1">
     <div class="brand-title">Raghuvir Sweets and Bakers</div>
     <div class="brand-sub">TALLY BILLING UPDATE — ACCOUNTANT DASHBOARD</div>
@@ -77,6 +78,23 @@
       </div>
 
       <div class="mb-3">
+        <label class="form-label">Bill Amount (₹)</label>
+        <input type="number" id="billAmount" min="0" step="0.01" class="form-control" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Payment Mode</label>
+        <select id="paymentMode" class="form-select" required>
+          <option value="">Select...</option>
+          <option value="Cash">Cash</option>
+          <option value="UPI">UPI</option>
+          <option value="Cheque">Cheque</option>
+          <option value="Credit">Credit</option>
+        </select>
+        <div class="verify-note">Pre-filled from the inward entry — please verify and correct if needed before submitting.</div>
+      </div>
+
+      <div class="mb-3">
         <label class="form-label">Remark</label>
         <textarea id="remark" class="form-control" rows="3"></textarea>
       </div>
@@ -91,7 +109,7 @@
         <label class="form-check-label" for="updatedInTally">Updated in Tally</label>
       </div>
 
-      <button type="submit" class="btn btn-success w-100 text-white" id="submitBtn">Submit Update</button>
+      <button type="submit" class="btn btn-success w-100 text-white" id="submitBtn">Verify &amp; Submit Entry</button>
     </form>
   </div>
 </div>
@@ -122,14 +140,20 @@ const pendingSelect = document.getElementById('pendingBills');
 const detailsCard = document.getElementById('detailsCard');
 const detailsBox = document.getElementById('detailsBox');
 const formCard = document.getElementById('formCard');
+const paymentModeSelect = document.getElementById('paymentMode');
 
 function loadVendors() {
-  fetch(APPS_SCRIPT_URL + '?action=getVendors')
+  fetch(APPS_SCRIPT_URL + '?action=getVendorsWithPendingBills')
     .then(r => r.json())
     .then(res => {
       if (!res.ok) {
         vendorFilter.innerHTML = '<option value="">Failed to load vendors</option>';
         return showToast(res.error || 'Failed to load vendors', 'error');
+      }
+      const previouslySelected = vendorFilter.value;
+      if (res.vendors.length === 0) {
+        vendorFilter.innerHTML = '<option value="">No vendors with pending Tally bills 🎉</option>';
+        return;
       }
       vendorFilter.innerHTML = '<option value="">-- Select vendor --</option>';
       res.vendors.forEach(v => {
@@ -138,6 +162,10 @@ function loadVendors() {
         opt.textContent = v;
         vendorFilter.appendChild(opt);
       });
+      // keep the accountant's current selection if it's still in the pending list
+      if (previouslySelected && res.vendors.includes(previouslySelected)) {
+        vendorFilter.value = previouslySelected;
+      }
     })
     .catch(err => {
       vendorFilter.innerHTML = '<option value="">Failed to load vendors</option>';
@@ -194,9 +222,11 @@ pendingSelect.addEventListener('change', () => {
         <div><strong>Item Name:</strong> ${d.itemName}</div>
         <div><strong>Quantity:</strong> ${d.quantity}</div>
         <div><strong>Payment Status:</strong> ${d.paymentStatus}</div>
-        <div><strong>Payment Mode:</strong> ${d.paymentMode}</div>
+        <div><strong>Payment Mode (as entered):</strong> ${d.paymentMode}</div>
         <div><strong>Original Bill:</strong> ${d.billFileLink ? `<a href="${d.billFileLink}" target="_blank">View File</a>` : '—'}</div>
       `;
+      // Pre-fill payment mode for verification — accountant can change it
+      paymentModeSelect.value = d.paymentMode || '';
       detailsCard.style.display = 'block';
       formCard.style.display = 'block';
     })
@@ -243,6 +273,10 @@ document.getElementById('tallyForm').addEventListener('submit', async (e) => {
   if (!document.getElementById('updatedInTally').checked) {
     return showToast('You must check "Updated in Tally" to submit', 'error');
   }
+  const billAmount = document.getElementById('billAmount').value;
+  if (!billAmount || Number(billAmount) <= 0) return showToast('Enter a valid Bill Amount', 'error');
+  const paymentMode = paymentModeSelect.value;
+  if (!paymentMode) return showToast('Please verify/select the Payment Mode', 'error');
 
   const submitBtn = document.getElementById('submitBtn');
   submitBtn.disabled = true;
@@ -259,6 +293,8 @@ document.getElementById('tallyForm').addEventListener('submit', async (e) => {
       vendorName: vendorFilter.value,
       accountantName: document.getElementById('accountantName').value.trim(),
       invoiceRef: document.getElementById('invoiceRef').value.trim(),
+      billAmount: billAmount,
+      paymentMode: paymentMode,
       remark: document.getElementById('remark').value.trim(),
       updatedInTally: document.getElementById('updatedInTally').checked,
       tallyPhotoData: tallyPhotoData
@@ -276,6 +312,7 @@ document.getElementById('tallyForm').addEventListener('submit', async (e) => {
       document.getElementById('tallyForm').reset();
       detailsCard.style.display = 'none';
       formCard.style.display = 'none';
+      loadVendors();
       loadPendingBills();
     } else {
       showToast(data.error || 'Submit failed', 'error');
@@ -284,7 +321,7 @@ document.getElementById('tallyForm').addEventListener('submit', async (e) => {
     showToast('Error: ' + err.message, 'error');
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Submit Update';
+    submitBtn.textContent = 'Verify & Submit Entry';
   }
 });
 </script>
