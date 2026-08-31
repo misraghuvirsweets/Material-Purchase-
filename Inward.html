@@ -24,6 +24,8 @@
   .brand-sub{ font-size:.75rem; opacity:.85; letter-spacing:.5px; }
   .branch-badge{ font-size:.75rem; background:var(--brand-secondary)!important; color:#3a2900; }
   .card{ border:none; border-radius:16px; box-shadow:0 4px 16px rgba(0,0,0,.07); }
+  .card-title-row{ font-weight:700; color:var(--brand-primary); font-size:1rem; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
+  .card-title-row .step-num{ background:var(--brand-primary); color:#fff; width:22px; height:22px; border-radius:50%; font-size:.75rem; display:flex; align-items:center; justify-content:center; }
   .form-label{ font-weight:600; font-size:.88rem; color:#3a2b1a; }
   .btn-scan{
     background: linear-gradient(135deg, var(--brand-secondary), #b8842b);
@@ -33,6 +35,8 @@
   .btn-scan:active{ transform: scale(.98); }
   .btn-success{ background:var(--brand-primary); border:none; border-radius:12px; padding:12px; font-weight:600; }
   .btn-success:hover{ background:#5e1620; }
+  .btn-add-item{ background:#2f6e3f; border:none; color:#fff; border-radius:10px; font-weight:600; }
+  .btn-add-item:hover{ background:#234f2e; color:#fff; }
   .form-control, .form-select{ border-radius:10px; padding:10px 12px; }
   .form-control:focus, .form-select:focus{ border-color:var(--brand-secondary); box-shadow:0 0 0 .2rem rgba(212,164,55,.25); }
   #reader{ width:100%; border-radius:12px; overflow:hidden; }
@@ -42,12 +46,17 @@
   .toast-container{ z-index:1080; }
   .item-preview{ background:#fbf7ee; border:1px dashed var(--brand-secondary); border-radius:12px; padding:12px; font-size:.85rem; }
   .source-badge{ font-size:.7rem; }
+  .cart-table{ font-size:.85rem; }
+  .cart-table th{ background:#fbf7ee; font-weight:600; color:#3a2b1a; }
+  .cart-empty{ text-align:center; color:#9c8f7b; padding:18px; font-size:.85rem; }
+  .cart-badge{ background:var(--brand-primary); }
+  .remove-item-btn{ color:#b02a37; cursor:pointer; font-weight:700; }
 </style>
 </head>
 <body>
 
 <div class="brand-header d-flex align-items-center gap-3">
-  <img src="https://drive.google.com/uc?export=view&id=18aiuiSN9uj-mJtOkGB1rNt4GP6yUbvuO" alt="Logo" onerror="this.style.display='none'">
+  <img src="https://drive.google.com/thumbnail?id=18aiuiSN9uj-mJtOkGB1rNt4GP6yUbvuO&sz=w200" alt="Logo" referrerpolicy="no-referrer" onerror="this.style.display='none'">
   <div class="flex-grow-1">
     <div class="brand-title">Raghuvir Sweets and Bakers</div>
     <div class="brand-sub">MATERIAL INWARD SYSTEM</div>
@@ -55,80 +64,90 @@
   <span id="branchBadge" class="badge branch-badge">Branch: --</span>
 </div>
 
-<div class="container mt-3" style="max-width:600px;">
+<div class="container mt-3" style="max-width:640px;">
 
-  <button type="button" class="btn btn-scan w-100 mb-3" id="openScanBtn">
-    📷&nbsp; Scan Barcode
-  </button>
+  <!-- STEP 1: Bill-level details (shared across all items in this bill) -->
+  <div class="card p-3 mb-3">
+    <div class="card-title-row"><span class="step-num">1</span> Vendor &amp; Bill Details</div>
 
-  <div class="card p-3">
-    <form id="inwardForm">
-      <div class="mb-3">
-        <label class="form-label">Barcode</label>
-        <input type="text" id="barcode" class="form-control" placeholder="Tap 'Scan Barcode' above, or type manually" required>
-      </div>
+    <div class="mb-3">
+      <label class="form-label">Vendor</label>
+      <select id="vendorName" class="form-select" required>
+        <option value="">Loading vendors...</option>
+      </select>
+    </div>
 
-      <div id="itemPreview" class="item-preview mb-3" style="display:none;">
-        <span class="badge source-badge" id="sourceBadge"></span>
-        <div class="mt-1"><strong id="previewName"></strong></div>
-        <div class="text-muted" id="previewMeta"></div>
-      </div>
+    <div class="mb-3">
+      <label class="form-label">Bill Date</label>
+      <input type="date" id="billDate" class="form-control" required>
+    </div>
 
-      <div class="mb-3">
-        <label class="form-label">Vendor</label>
-        <select id="vendorName" class="form-select" required>
-          <option value="">Loading vendors...</option>
-        </select>
-      </div>
+    <div class="mb-3">
+      <label class="form-label">Payment Status</label>
+      <select id="paymentStatus" class="form-select" required>
+        <option value="">Select...</option>
+        <option value="Payment Done">Payment Done</option>
+        <option value="Payment Pending">Payment Pending</option>
+      </select>
+    </div>
 
-      <div class="mb-3">
-        <label class="form-label">Item Name</label>
-        <input type="text" id="itemName" class="form-control" required>
-      </div>
+    <div class="mb-3" id="paymentModeWrap" style="display:none;">
+      <label class="form-label">Payment Mode</label>
+      <div id="paymentModeOptions" class="d-flex gap-3 flex-wrap"></div>
+    </div>
 
-      <div class="row">
-        <div class="col-6 mb-3">
-          <label class="form-label">Category</label>
-          <input type="text" id="category" class="form-control">
-        </div>
-        <div class="col-6 mb-3">
-          <label class="form-label">Unit</label>
-          <input type="text" id="unit" class="form-control">
-        </div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">Quantity</label>
-        <input type="number" id="quantity" min="0" step="any" class="form-control" required>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">Bill Date</label>
-        <input type="date" id="billDate" class="form-control" required>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">Payment Status</label>
-        <select id="paymentStatus" class="form-select" required>
-          <option value="">Select...</option>
-          <option value="Payment Done">Payment Done</option>
-          <option value="Payment Pending">Payment Pending</option>
-        </select>
-      </div>
-
-      <div class="mb-3" id="paymentModeWrap" style="display:none;">
-        <label class="form-label">Payment Mode</label>
-        <div id="paymentModeOptions" class="d-flex gap-3 flex-wrap"></div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">Bill Photo / PDF</label>
-        <input type="file" id="billFile" class="form-control" accept="image/*,application/pdf">
-      </div>
-
-      <button type="submit" class="btn btn-success w-100 text-white" id="submitBtn">Save Entry</button>
-    </form>
+    <div class="mb-0">
+      <label class="form-label">Bill Photo / PDF</label>
+      <input type="file" id="billFile" class="form-control" accept="image/*,application/pdf">
+    </div>
   </div>
+
+  <!-- STEP 2: Scan & add items -->
+  <div class="card p-3 mb-3">
+    <div class="card-title-row"><span class="step-num">2</span> Add Items <span class="badge cart-badge ms-auto" id="cartCountBadge">0 added</span></div>
+
+    <button type="button" class="btn btn-scan w-100 mb-3" id="openScanBtn">📷&nbsp; Scan Barcode</button>
+
+    <input type="text" id="barcode" class="form-control mb-2" placeholder="...or type barcode manually, then press Enter">
+
+    <div id="itemPreview" class="item-preview mb-2" style="display:none;">
+      <span class="badge source-badge" id="sourceBadge"></span>
+      <div class="row mt-2 g-2">
+        <div class="col-12">
+          <label class="form-label mb-1">Item Name</label>
+          <input type="text" id="itemName" class="form-control form-control-sm">
+        </div>
+        <div class="col-6">
+          <label class="form-label mb-1">Category</label>
+          <input type="text" id="category" class="form-control form-control-sm">
+        </div>
+        <div class="col-6">
+          <label class="form-label mb-1">Unit</label>
+          <input type="text" id="unit" class="form-control form-control-sm">
+        </div>
+        <div class="col-6">
+          <label class="form-label mb-1">Quantity</label>
+          <input type="number" id="quantity" min="0" step="any" class="form-control form-control-sm">
+        </div>
+        <div class="col-6 d-flex align-items-end">
+          <button type="button" class="btn btn-add-item w-100" id="addItemBtn">+ Add to List</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm cart-table align-middle mb-0">
+        <thead>
+          <tr><th>Item</th><th>Qty</th><th>Source</th><th></th></tr>
+        </thead>
+        <tbody id="cartBody"></tbody>
+      </table>
+      <div id="cartEmptyMsg" class="cart-empty">No items added yet — scan a barcode above.</div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Submit -->
+  <button type="button" class="btn btn-success w-100 text-white" id="submitBtn">Save All Items</button>
 </div>
 
 <!-- Scan Modal -->
@@ -163,7 +182,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgBHm9_j0srdnm
 
 /* ============ Branch detection ============ */
 const params = new URLSearchParams(window.location.search);
-const branch = params.get('branch') || 'Branch1';
+const branch = params.get('branch') || 'Ram Mandir';
 document.getElementById('branchBadge').textContent = 'Branch: ' + branch;
 
 /* ============ Toast helper ============ */
@@ -172,6 +191,36 @@ function showToast(message, type = 'success') {
   toastEl.className = 'toast align-items-center text-white border-0 bg-' + (type === 'success' ? 'success' : 'danger');
   document.getElementById('toastBody').textContent = message;
   new bootstrap.Toast(toastEl).show();
+}
+
+/* ============ Cart (multi-item) state ============ */
+let cart = [];
+
+function renderCart() {
+  const body = document.getElementById('cartBody');
+  const emptyMsg = document.getElementById('cartEmptyMsg');
+  const badge = document.getElementById('cartCountBadge');
+  badge.textContent = cart.length + ' added';
+
+  if (cart.length === 0) {
+    body.innerHTML = '';
+    emptyMsg.style.display = 'block';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+  body.innerHTML = cart.map((item, idx) => `
+    <tr>
+      <td>${item.itemName}</td>
+      <td>${item.quantity}</td>
+      <td><span class="badge bg-secondary">${item.itemSource}</span></td>
+      <td class="text-end"><span class="remove-item-btn" onclick="removeCartItem(${idx})">✕</span></td>
+    </tr>
+  `).join('');
+}
+
+function removeCartItem(idx) {
+  cart.splice(idx, 1);
+  renderCart();
 }
 
 /* ============ One-button Scan Barcode flow ============ */
@@ -192,7 +241,7 @@ scanModalEl.addEventListener('shown.bs.modal', () => {
     { facingMode: "environment" },
     { fps: 10, qrbox: 250 },
     (decodedText) => {
-      if (scannerRunning === false) return; // avoid double fires
+      if (scannerRunning === false) return;
       scannerRunning = false;
       scanStatus.textContent = 'Barcode captured: ' + decodedText;
       document.getElementById('barcode').value = decodedText;
@@ -225,6 +274,15 @@ function stopScanner(cb) {
     cb();
   }
 }
+
+/* Manual barcode entry fallback */
+document.getElementById('barcode').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const barcode = e.target.value.trim();
+    if (barcode) lookupBarcode(barcode);
+  }
+});
 
 /* ============ Vendor dropdown ============ */
 function loadVendors() {
@@ -261,12 +319,12 @@ function lookupBarcode(barcode) {
       document.getElementById('itemName').value = res.itemName || '';
       document.getElementById('category').value = res.category || '';
       document.getElementById('unit').value = res.unit || '';
+      document.getElementById('quantity').value = '';
 
       const preview = document.getElementById('itemPreview');
       const badge = document.getElementById('sourceBadge');
       preview.style.display = 'block';
-      document.getElementById('previewName').textContent = res.itemName || '(no name found — enter manually)';
-      document.getElementById('previewMeta').textContent = [res.category, res.unit].filter(Boolean).join(' • ');
+      preview.dataset.barcode = barcode;
 
       badge.textContent = 'Source: ' + res.source;
       badge.className = 'badge source-badge ' + (
@@ -275,13 +333,44 @@ function lookupBarcode(barcode) {
       );
 
       if (res.source === 'Manual') {
-        showToast('Item not found in Master or online — please fill in manually', 'error');
+        showToast('Item not found — please fill in manually, then Add to List', 'error');
       } else {
-        showToast('Item auto-filled from ' + res.source + '!');
+        showToast('Item auto-filled from ' + res.source + '! Enter quantity and add it.');
       }
+      document.getElementById('quantity').focus();
     })
     .catch(err => showToast('Network error: ' + err, 'error'));
 }
+
+/* ============ Add current item to cart ============ */
+document.getElementById('addItemBtn').addEventListener('click', () => {
+  const itemName = document.getElementById('itemName').value.trim();
+  const quantity = document.getElementById('quantity').value;
+  const barcode = document.getElementById('itemPreview').dataset.barcode || document.getElementById('barcode').value.trim();
+  const sourceBadgeText = document.getElementById('sourceBadge').textContent.replace('Source: ', '') || 'Manual';
+
+  if (!itemName) return showToast('Enter an item name first', 'error');
+  if (!quantity || Number(quantity) <= 0) return showToast('Enter a valid quantity', 'error');
+
+  cart.push({
+    barcode: barcode,
+    itemName: itemName,
+    category: document.getElementById('category').value.trim(),
+    unit: document.getElementById('unit').value.trim(),
+    quantity: quantity,
+    itemSource: sourceBadgeText
+  });
+  renderCart();
+  showToast('Added "' + itemName + '" — scan the next item, or Save All Items when done.');
+
+  // reset item-entry fields for next scan
+  document.getElementById('barcode').value = '';
+  document.getElementById('itemName').value = '';
+  document.getElementById('category').value = '';
+  document.getElementById('unit').value = '';
+  document.getElementById('quantity').value = '';
+  document.getElementById('itemPreview').style.display = 'none';
+});
 
 /* ============ Conditional payment mode (radio-like checkboxes) ============ */
 const paymentStatusEl = document.getElementById('paymentStatus');
@@ -327,11 +416,10 @@ function getSelectedPaymentMode() {
   return checked ? checked.value : '';
 }
 
-/* ============ File -> compressed base64 (speeds up Save Entry a lot) ============ */
+/* ============ File -> compressed base64 ============ */
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     if (!file) return resolve('');
-    // Non-image files (e.g. PDF) — send as-is, no compression possible
     if (!file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -339,7 +427,6 @@ function fileToBase64(file) {
       reader.readAsDataURL(file);
       return;
     }
-    // Images — downscale + re-encode as JPEG to shrink upload size drastically
     const img = new Image();
     const reader = new FileReader();
     reader.onload = (e) => { img.src = e.target.result; };
@@ -363,17 +450,23 @@ function fileToBase64(file) {
   });
 }
 
-/* ============ Submit ============ */
-document.getElementById('inwardForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
+/* ============ Submit ALL items in the cart as one batch ============ */
+document.getElementById('submitBtn').addEventListener('click', async () => {
   const submitBtn = document.getElementById('submitBtn');
 
   const vendorName = document.getElementById('vendorName').value;
   if (!vendorName) return showToast('Please select a vendor', 'error');
 
+  const billDate = document.getElementById('billDate').value;
+  if (!billDate) return showToast('Please select the bill date', 'error');
+
   const paymentStatus = paymentStatusEl.value;
+  if (!paymentStatus) return showToast('Please select payment status', 'error');
+
   const paymentMode = getSelectedPaymentMode();
   if (!paymentMode) return showToast('Please select a payment mode', 'error');
+
+  if (cart.length === 0) return showToast('Add at least one item before saving', 'error');
 
   submitBtn.disabled = true;
   submitBtn.textContent = 'Compressing photo...';
@@ -381,38 +474,35 @@ document.getElementById('inwardForm').addEventListener('submit', async (e) => {
   try {
     const fileInput = document.getElementById('billFile');
     const billFileData = await fileToBase64(fileInput.files[0]);
-    submitBtn.textContent = 'Saving...';
-
-    const barcode = document.getElementById('barcode').value.trim();
-    const sourceBadgeText = document.getElementById('sourceBadge').textContent.replace('Source: ', '') || 'Manual';
+    submitBtn.textContent = 'Saving ' + cart.length + ' item(s)...';
 
     const payload = {
-      action: 'submitInward',
+      action: 'submitInwardBatch',
       branch: branch,
       vendorName: vendorName,
-      barcode: barcode,
-      itemName: document.getElementById('itemName').value.trim(),
-      itemSource: sourceBadgeText,
-      quantity: document.getElementById('quantity').value,
-      billDate: document.getElementById('billDate').value,
+      billDate: billDate,
       paymentStatus: paymentStatus,
       paymentMode: paymentMode,
-      billFileData: billFileData
+      billFileData: billFileData,
+      items: cart
     };
 
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
     const data = await res.json();
 
     if (data.ok) {
-      showToast('Entry saved successfully!');
-      document.getElementById('inwardForm').reset();
-      paymentModeWrap.style.display = 'none';
-      document.getElementById('itemPreview').style.display = 'none';
+      showToast(data.message || 'Saved successfully!');
+      cart = [];
+      renderCart();
       document.getElementById('vendorName').selectedIndex = 0;
+      document.getElementById('billDate').value = '';
+      document.getElementById('paymentStatus').selectedIndex = 0;
+      paymentModeWrap.style.display = 'none';
+      fileInput.value = '';
     } else {
       showToast(data.error || 'Save failed', 'error');
     }
@@ -420,9 +510,11 @@ document.getElementById('inwardForm').addEventListener('submit', async (e) => {
     showToast('Error: ' + err.message, 'error');
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Save Entry';
+    submitBtn.textContent = 'Save All Items';
   }
 });
+
+renderCart();
 </script>
 </body>
 </html>
