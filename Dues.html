@@ -58,6 +58,7 @@
     <li class="nav-item"><button class="nav-link active" data-tab="dueTab">Due Bills</button></li>
     <li class="nav-item"><button class="nav-link" data-tab="paidTab">Paid Bills</button></li>
     <li class="nav-item"><button class="nav-link" data-tab="summaryTab">Party Summary</button></li>
+    <li class="nav-item"><button class="nav-link" data-tab="searchTab">Search by Date</button></li>
     <li class="nav-item"><button class="nav-link" data-tab="addTab">+ Add Due Bill</button></li>
   </ul>
 
@@ -70,8 +71,8 @@
       </div>
       <div class="table-responsive">
         <table class="table table-sm align-middle">
-          <thead><tr><th>Party</th><th>Bill Date</th><th>Amount</th><th>Mode</th><th>Due Days</th><th>Bill</th><th></th></tr></thead>
-          <tbody id="dueBody"><tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr></tbody>
+          <thead><tr><th>Txn ID</th><th>Party</th><th>Bill Date</th><th>Amount</th><th>Mode</th><th>Due Days</th><th>Bill</th><th></th></tr></thead>
+          <tbody id="dueBody"><tr><td colspan="8" class="text-center text-muted py-3">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -86,8 +87,8 @@
       </div>
       <div class="table-responsive">
         <table class="table table-sm align-middle">
-          <thead><tr><th>Party</th><th>Bill Date</th><th>Amount</th><th>Mode</th><th>Bill</th></tr></thead>
-          <tbody id="paidBody"><tr><td colspan="5" class="text-center text-muted py-3">Loading...</td></tr></tbody>
+          <thead><tr><th>Txn ID</th><th>Party</th><th>Bill Date</th><th>Paid On</th><th>Amount</th><th>Mode</th><th>Bill</th></tr></thead>
+          <tbody id="paidBody"><tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -105,6 +106,27 @@
         <table class="table table-sm align-middle">
           <thead><tr><th>Party</th><th>Total Due</th><th># Due</th><th>Total Paid</th><th># Paid</th><th>Grand Total</th></tr></thead>
           <tbody id="summaryBody"><tr><td colspan="6" class="text-center text-muted py-3">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEARCH BY DATE -->
+  <div class="tab-pane" id="searchTab" style="display:none;">
+    <div class="card p-3 mb-3">
+      <h6 class="mb-2">Party Dues as of a Date</h6>
+      <p class="text-muted" style="font-size:.82rem;">
+        Payment term is <strong id="termDaysLabel">8</strong> days from Bill Date. Enter a date below to see
+        which parties' Credit / Payment Pending bills are due <em>on or before</em> that date, and how much.
+      </p>
+      <div class="input-group mb-3">
+        <input type="date" id="cutoffDateInput" class="form-control">
+        <button class="btn btn-success text-white" id="searchDueBtn">Search</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Party</th><th>Total Due</th><th># Bills</th><th>Oldest Due Date</th></tr></thead>
+          <tbody id="searchBody"><tr><td colspan="4" class="text-center text-muted py-3">Pick a date and tap Search</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -187,48 +209,52 @@ document.querySelectorAll('#tabNav .nav-link').forEach(btn => {
     if (btn.dataset.tab === 'dueTab') loadDue();
     if (btn.dataset.tab === 'paidTab') loadPaid();
     if (btn.dataset.tab === 'summaryTab') loadSummary();
+    if (btn.dataset.tab === 'searchTab') { /* wait for user to pick a date */ }
   });
 });
 
 /* ============ Due bill row coloring by age ============ */
+const PAYMENT_TERM_DAYS = 8; // matches DEFAULT_PAYMENT_TERM_DAYS in Config sheet
+
 function dueDaysClass(days) {
   if (days === '' || days === null || isNaN(days)) return '';
-  if (days >= 30) return 'due-critical';
-  if (days >= 15) return 'due-warn';
-  return 'due-ok';
+  if (days > PAYMENT_TERM_DAYS) return 'due-critical'; // past the 8-day term
+  if (days === PAYMENT_TERM_DAYS) return 'due-warn';    // due today
+  return 'due-ok';                                      // still within term
 }
 
 /* ============ Load Due Bills ============ */
 function loadDue() {
   const body = document.getElementById('dueBody');
-  body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr>';
+  body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Loading...</td></tr>';
   fetch(APPS_SCRIPT_URL + '?action=getDuePayments')
     .then(r => r.json())
     .then(res => {
-      if (!res.ok) { body.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">' + (res.error || 'Failed to load') + '</td></tr>'; return; }
-      if (res.dues.length === 0) { body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No pending dues 🎉</td></tr>'; return; }
+      if (!res.ok) { body.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-3">' + (res.error || 'Failed to load') + '</td></tr>'; return; }
+      if (res.dues.length === 0) { body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">No pending dues 🎉</td></tr>'; return; }
       body.innerHTML = res.dues.map(d => `
         <tr>
+          <td>${d.transactionId}</td>
           <td>${d.partyName}</td>
           <td>${d.billDate}</td>
           <td>₹${Number(d.billAmount).toLocaleString('en-IN')}</td>
           <td>${d.paymentMode}</td>
           <td class="${dueDaysClass(d.dueDays)}">${d.dueDays}</td>
           <td>${d.billPhotoLink ? `<a class="bill-link" href="${d.billPhotoLink}" target="_blank">View</a>` : '—'}</td>
-          <td><button class="btn-paid" onclick="markPaid('${d.recordId}','${d.partyName.replace(/'/g,"\\'")}')">Mark Paid</button></td>
+          <td><button class="btn-paid" onclick="markPaid('${d.transactionId}','${d.partyName.replace(/'/g,"\\'")}')">Mark Paid</button></td>
         </tr>
       `).join('');
     })
-    .catch(err => body.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">Network error: ' + err + '</td></tr>');
+    .catch(err => body.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-3">Network error: ' + err + '</td></tr>');
 }
 document.getElementById('refreshDueBtn').addEventListener('click', loadDue);
 
-function markPaid(recordId, partyName) {
+function markPaid(transactionId, partyName) {
   if (!confirm('Mark this bill from "' + partyName + '" as paid? It will move to Paid Payments.')) return;
   fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'markPaymentAsPaid', recordId: recordId })
+    body: JSON.stringify({ action: 'markPaymentAsPaid', transactionId: transactionId })
   })
     .then(r => r.json())
     .then(res => {
@@ -241,23 +267,25 @@ function markPaid(recordId, partyName) {
 /* ============ Load Paid Bills ============ */
 function loadPaid() {
   const body = document.getElementById('paidBody');
-  body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Loading...</td></tr>';
+  body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Loading...</td></tr>';
   fetch(APPS_SCRIPT_URL + '?action=getPaidPayments')
     .then(r => r.json())
     .then(res => {
-      if (!res.ok) { body.innerHTML = '<tr><td colspan="5" class="text-danger text-center py-3">' + (res.error || 'Failed to load') + '</td></tr>'; return; }
-      if (res.paid.length === 0) { body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No paid bills yet</td></tr>'; return; }
+      if (!res.ok) { body.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">' + (res.error || 'Failed to load') + '</td></tr>'; return; }
+      if (res.paid.length === 0) { body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No paid bills yet</td></tr>'; return; }
       body.innerHTML = res.paid.map(p => `
         <tr>
+          <td>${p.transactionId}</td>
           <td>${p.partyName}</td>
           <td>${p.billDate}</td>
+          <td>${p.paymentDate || '—'}</td>
           <td>₹${Number(p.billAmount).toLocaleString('en-IN')}</td>
           <td>${p.paymentMode}</td>
           <td>${p.billPhotoLink ? `<a class="bill-link" href="${p.billPhotoLink}" target="_blank">View</a>` : '—'}</td>
         </tr>
       `).join('');
     })
-    .catch(err => body.innerHTML = '<tr><td colspan="5" class="text-danger text-center py-3">Network error: ' + err + '</td></tr>');
+    .catch(err => body.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-3">Network error: ' + err + '</td></tr>');
 }
 document.getElementById('refreshPaidBtn').addEventListener('click', loadPaid);
 
@@ -381,6 +409,34 @@ document.getElementById('addDueForm').addEventListener('submit', async (e) => {
     btn.disabled = false;
     btn.textContent = 'Add Due Bill';
   }
+});
+
+/* ============ Search Due Bills by Date ============ */
+document.getElementById('searchDueBtn').addEventListener('click', () => {
+  const cutoffDate = document.getElementById('cutoffDateInput').value;
+  const body = document.getElementById('searchBody');
+  if (!cutoffDate) { showToast('Pick a date first', 'error'); return; }
+
+  body.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Searching...</td></tr>';
+  fetch(APPS_SCRIPT_URL + '?action=getDueByDate&cutoffDate=' + encodeURIComponent(cutoffDate))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) { body.innerHTML = '<tr><td colspan="4" class="text-danger text-center py-3">' + (res.error || 'Search failed') + '</td></tr>'; return; }
+      document.getElementById('termDaysLabel').textContent = res.termDays;
+      if (res.parties.length === 0) {
+        body.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No Credit/Pending bills are due by this date 🎉</td></tr>';
+        return;
+      }
+      body.innerHTML = res.parties.map(p => `
+        <tr>
+          <td>${p.partyName}</td>
+          <td class="due-critical">₹${Number(p.totalDue).toLocaleString('en-IN')}</td>
+          <td>${p.billCount}</td>
+          <td>${p.oldestDueDate}</td>
+        </tr>
+      `).join('');
+    })
+    .catch(err => body.innerHTML = '<tr><td colspan="4" class="text-danger text-center py-3">Network error: ' + err + '</td></tr>');
 });
 
 /* ============ Init ============ */
