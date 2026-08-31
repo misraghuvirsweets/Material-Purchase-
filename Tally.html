@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tally Billing Update — Accountant Dashboard</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  body { background:#f4f6f9; padding-bottom: 60px; }
+  .card { border:none; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  .readonly-box { background:#eef1f6; border-radius:10px; padding:12px; font-size:.9rem; }
+  .readonly-box div { margin-bottom:4px; }
+  .toast-container { z-index: 1080; }
+  .form-label { font-weight:600; font-size:.9rem; }
+</style>
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark mb-3">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h1">🧾 Tally Billing Update</span>
+  </div>
+</nav>
+
+<div class="container" style="max-width:640px;">
+  <div class="card p-3 mb-3">
+    <label class="form-label">Vendor</label>
+    <select id="vendorFilter" class="form-select mb-3">
+      <option value="">Loading vendors...</option>
+    </select>
+
+    <label class="form-label">Pending Bills</label>
+    <div class="input-group mb-2">
+      <select id="pendingBills" class="form-select">
+        <option value="">Select a vendor first</option>
+      </select>
+      <button id="refreshBtn" class="btn btn-outline-secondary">↻</button>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-3" id="detailsCard" style="display:none;">
+    <h6 class="mb-2">Bill Details</h6>
+    <div class="readonly-box" id="detailsBox"></div>
+  </div>
+
+  <div class="card p-3" id="formCard" style="display:none;">
+    <form id="tallyForm">
+      <div class="mb-3">
+        <label class="form-label">Accountant Name / ID</label>
+        <input type="text" id="accountantName" class="form-control" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Invoice / Bill Reference No.</label>
+        <input type="text" id="invoiceRef" class="form-control" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Remark</label>
+        <textarea id="remark" class="form-control" rows="3"></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Upload Final Tally-Entered Invoice</label>
+        <input type="file" id="tallyPhoto" class="form-control" accept="image/*,application/pdf">
+      </div>
+
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="updatedInTally" required>
+        <label class="form-check-label" for="updatedInTally">Updated in Tally</label>
+      </div>
+
+      <button type="submit" class="btn btn-success w-100" id="submitBtn">Submit Update</button>
+    </form>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast align-items-center text-white border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toastBody"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/* ============ CONFIG ============ */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgBHm9_j0srdnmgXNwQgvDnB7ymtdyOfjE399vm1uyJG2Uh8yP5XdeD5zH_M691rEC-w/exec";
+
+function showToast(message, type = 'success') {
+  const toastEl = document.getElementById('toast');
+  toastEl.className = 'toast align-items-center text-white border-0 bg-' + (type === 'success' ? 'success' : 'danger');
+  document.getElementById('toastBody').textContent = message;
+  new bootstrap.Toast(toastEl).show();
+}
+
+const vendorFilter = document.getElementById('vendorFilter');
+const pendingSelect = document.getElementById('pendingBills');
+const detailsCard = document.getElementById('detailsCard');
+const detailsBox = document.getElementById('detailsBox');
+const formCard = document.getElementById('formCard');
+
+function loadVendors() {
+  fetch(APPS_SCRIPT_URL + '?action=getVendors')
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) {
+        vendorFilter.innerHTML = '<option value="">Failed to load vendors</option>';
+        return showToast(res.error || 'Failed to load vendors', 'error');
+      }
+      vendorFilter.innerHTML = '<option value="">-- Select vendor --</option>';
+      res.vendors.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        vendorFilter.appendChild(opt);
+      });
+    })
+    .catch(err => {
+      vendorFilter.innerHTML = '<option value="">Failed to load vendors</option>';
+      showToast('Network error: ' + err, 'error');
+    });
+}
+loadVendors();
+
+function loadPendingBills() {
+  const vendor = vendorFilter.value;
+  if (!vendor) {
+    pendingSelect.innerHTML = '<option value="">Select a vendor first</option>';
+    detailsCard.style.display = 'none';
+    formCard.style.display = 'none';
+    return;
+  }
+  pendingSelect.innerHTML = '<option value="">Loading...</option>';
+  fetch(APPS_SCRIPT_URL + '?action=getPendingBills&vendor=' + encodeURIComponent(vendor))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) return showToast(res.error || 'Failed to load bills', 'error');
+      pendingSelect.innerHTML = '<option value="">-- Select a pending bill --</option>';
+      res.bills.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.rowUid;
+        opt.textContent = b.label;
+        pendingSelect.appendChild(opt);
+      });
+      if (res.bills.length === 0) {
+        pendingSelect.innerHTML = '<option value="">No pending bills for this vendor 🎉</option>';
+      }
+    })
+    .catch(err => showToast('Network error: ' + err, 'error'));
+}
+
+vendorFilter.addEventListener('change', loadPendingBills);
+document.getElementById('refreshBtn').addEventListener('click', loadPendingBills);
+
+pendingSelect.addEventListener('change', () => {
+  const rowUid = pendingSelect.value;
+  if (!rowUid) {
+    detailsCard.style.display = 'none';
+    formCard.style.display = 'none';
+    return;
+  }
+  fetch(APPS_SCRIPT_URL + '?action=getBillDetails&rowUid=' + encodeURIComponent(rowUid))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) return showToast(res.error || 'Failed to load details', 'error');
+      const d = res.details;
+      detailsBox.innerHTML = `
+        <div><strong>Branch:</strong> ${d.branch}</div>
+        <div><strong>Vendor:</strong> ${d.vendorName}</div>
+        <div><strong>Item Name:</strong> ${d.itemName}</div>
+        <div><strong>Quantity:</strong> ${d.quantity}</div>
+        <div><strong>Payment Status:</strong> ${d.paymentStatus}</div>
+        <div><strong>Payment Mode:</strong> ${d.paymentMode}</div>
+        <div><strong>Original Bill:</strong> ${d.billFileLink ? `<a href="${d.billFileLink}" target="_blank">View File</a>` : '—'}</div>
+      `;
+      detailsCard.style.display = 'block';
+      formCard.style.display = 'block';
+    })
+    .catch(err => showToast('Network error: ' + err, 'error'));
+});
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return resolve('');
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('tallyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const rowUid = pendingSelect.value;
+  if (!rowUid) return showToast('Select a pending bill first', 'error');
+  if (!document.getElementById('updatedInTally').checked) {
+    return showToast('You must check "Updated in Tally" to submit', 'error');
+  }
+
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Submitting...';
+
+  try {
+    const fileInput = document.getElementById('tallyPhoto');
+    const tallyPhotoData = await fileToBase64(fileInput.files[0]);
+
+    const payload = {
+      action: 'submitTallyUpdate',
+      rowUid: rowUid,
+      vendorName: vendorFilter.value,
+      accountantName: document.getElementById('accountantName').value.trim(),
+      invoiceRef: document.getElementById('invoiceRef').value.trim(),
+      remark: document.getElementById('remark').value.trim(),
+      updatedInTally: document.getElementById('updatedInTally').checked,
+      tallyPhotoData: tallyPhotoData
+    };
+
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      showToast('Tally update saved!');
+      document.getElementById('tallyForm').reset();
+      detailsCard.style.display = 'none';
+      formCard.style.display = 'none';
+      loadPendingBills();
+    } else {
+      showToast(data.error || 'Submit failed', 'error');
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Update';
+  }
+});
+</script>
+</body>
+</html>
