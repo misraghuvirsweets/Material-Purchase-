@@ -327,13 +327,38 @@ function getSelectedPaymentMode() {
   return checked ? checked.value : '';
 }
 
-/* ============ File -> base64 ============ */
+/* ============ File -> compressed base64 (speeds up Save Entry a lot) ============ */
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     if (!file) return resolve('');
+    // Non-image files (e.g. PDF) — send as-is, no compression possible
+    if (!file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+    // Images — downscale + re-encode as JPEG to shrink upload size drastically
+    const img = new Image();
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = (e) => { img.src = e.target.result; };
     reader.onerror = reject;
+    img.onload = () => {
+      const MAX_DIM = 1600;
+      let { width, height } = img;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        const scale = MAX_DIM / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
@@ -351,11 +376,12 @@ document.getElementById('inwardForm').addEventListener('submit', async (e) => {
   if (!paymentMode) return showToast('Please select a payment mode', 'error');
 
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Saving...';
+  submitBtn.textContent = 'Compressing photo...';
 
   try {
     const fileInput = document.getElementById('billFile');
     const billFileData = await fileToBase64(fileInput.files[0]);
+    submitBtn.textContent = 'Saving...';
 
     const barcode = document.getElementById('barcode').value.trim();
     const sourceBadgeText = document.getElementById('sourceBadge').textContent.replace('Source: ', '') || 'Manual';
